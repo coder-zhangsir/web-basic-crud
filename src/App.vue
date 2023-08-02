@@ -1,12 +1,19 @@
 <template>
-  <div class="table_box">
+  <div class="tableBox">
     <div class="title">
       <h2>最简单的CRUD DEMO</h2>
     </div>
-    <div class="main">
+    <div class="searchBar">
       <el-input v-model="input" placeholder="请输入姓名搜索🔍" />
       <el-button type="primary">添加</el-button>
-      <el-table :data="tableData" style="width: 100%">
+    </div>
+    <div class="tableCore">
+      <el-table 
+        :data="tableData"
+        style="width: 100%"
+        @selection-change="handleSelectionChange"
+        border>
+        <el-table-column type="selection" width="55" />
         <el-table-column fixed prop="date" label="Date" width="150" />
         <el-table-column prop="name" label="Name" width="120" />
         <el-table-column prop="state" label="State" width="120" />
@@ -24,10 +31,12 @@
   </div>
 </template>
 
+
+
 <script setup>
 import { ref } from 'vue';
 
-/** 处理data信息 */ 
+/** 数据data */ 
 const input = ref("")
 const tableData = [
   {
@@ -67,20 +76,42 @@ const tableData = [
     tag: 'Office',
   },
 ]
+const multipleSelection = ref([])
 
-/** 处理事件函数 */
+
+
+/** 方法methods */
 const handleRawClick = () => {
   console.log('handleRawClick')
 } 
+const handleSelectionChange = val => {
+  multipleSelection.value = val
+  console.log(val)
+}
 
 </script>
 
+
+<!-- 对于element-plus插件中所自定义的元素，例如el-input,el-button，
+  我们在修改其CSS时不应和元素的方式一样查询，应该使用类名的方式查询例如.el-input-->
 <style scoped>
-.table_box {
+.tableBox {
   width: 800px;
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
+}
+.tableBox .title {
+  text-align: center;
+}
+
+.tableBox .searchBar {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.tableBox .searchBar .el-input {
+  width: 200px;
 }
 </style>

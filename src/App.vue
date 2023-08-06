@@ -7,7 +7,7 @@
     <!-- search btn -->
     <div class="search-bar">
       <!-- [Bug] v-model.lazy 无法在el-input上工作 -->
-      <el-input v-model.lazy.trim="input" placeholder="请输入姓名搜索🔍" />
+      <el-input v-model.trim="input" placeholder="请输入姓名搜索🔍" />
       <div class="btn-select">
         <el-button type="primary" @click="handleAddOrEditInfo('Add')">添加</el-button>
         <el-badge :value="multipleSelection.length" v-if="multipleSelection.length > 0" class="item">
@@ -89,8 +89,9 @@
 
 
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, shallowReactive, shallowRef, watch } from 'vue';
 import { create, remove, removeMultiple, update, read } from './assets/modules/crudModules.js';
+import { cloneDeep } from 'lodash'
 
 /** 数据data */
 const input = ref("")
@@ -158,16 +159,16 @@ let dialogType = 'Add'  // 对话框类型，默认 Add
 const restoreSearchValue = () => {
   input.value = ''
   // 先将表单数据恢复正常，因为可能会受到搜索框的影响
-  tableData.value = tableDataCopy
-  tableDataPagination.value = tableData.value
+  tableData.value = cloneDeep(tableDataCopy)
+  tableDataPagination.value = cloneDeep(tableData.value)
 }
 const updateTableDataCopy = () => {
   // 更新copy数组
-  tableDataCopy = Object.assign([], tableData.value)
-  tableDataPagination.value = Object.assign([], tableData.value)
+  tableDataCopy = cloneDeep(tableData.value)
+  tableDataPagination.value = cloneDeep(tableData.value)
   handlePageChange(currentPage)
 }
-const resetForm = (formEl) => {
+const resetFormValidation = (formEl) => {
   if (!formEl) formEl = ruleFormRef.value
   formEl?.resetFields()
 }
@@ -211,7 +212,8 @@ const handleDeleteData = (index) => {
 }
 const handleEditData = (row) => {
   // console.log('handleEditData')
-  form.value = Object.assign({}, row)
+  console.log(row)
+  form.value = cloneDeep(row)
   handleAddOrEditInfo("Edit")
 }
 // 多选
@@ -223,7 +225,7 @@ const handleAddOrEditInfo = (type) => {
   dialogFormVisible.value = true
   dialogTitle.value = type === "Add" ? "添加" : "编辑"
 
-  resetForm()
+  resetFormValidation()
   if (type === "Add") form.value = {}
 
   dialogType = type
@@ -233,7 +235,7 @@ const handleDialogConfirm = async (formEl) => {
   await formEl.validate((valid, fields) => {
     if (valid) {
       // console.log('submit!')
-      dialogFormVisible.value = false
+      restoreSearchValue()
 
       // 将信息更新到表格原位置
       // 检测查找索引是否存在
@@ -242,9 +244,10 @@ const handleDialogConfirm = async (formEl) => {
       if (dialogType === 'Edit') {
         update(form.value).then((response) => {
           console.log(response.data)
+
+          tableData.value[index] = form.value
+          updateTableDataCopy()
         })
-        tableData.value[index] = form.value
-        updateTableDataCopy()
       }
       else if (dialogType === 'Add') {
         tableData.value = tableDataCopy
@@ -258,17 +261,15 @@ const handleDialogConfirm = async (formEl) => {
           tableData.value.push(form.value)
           getUsersData()
         })
-
-
-
         // updateTableDataCopy()
       }
+      dialogFormVisible.value = false
     } else {
       // console.log('error submit!', fields)
     }
   })
   // 必须清除掉对话框表单值
-  form.value = {}
+  // form.value = {}
 }
 // 处理多选删除事件
 const handleDeleteMultiple = () => {
@@ -304,7 +305,7 @@ watch(input, (newQuestion) => {
   // console.log(newQuestion)
   // 对查询数据大小写进行处理，统一改成小写
   newQuestion = newQuestion.trim().toLowerCase()
-  tableData.value = tableDataCopy
+  tableData.value = cloneDeep(tableDataCopy)
   if (newQuestion.length > 0) {
     tableData.value = tableData.value.filter(d => d.name.toLowerCase().match(newQuestion))
   }

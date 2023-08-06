@@ -7,22 +7,25 @@
     <!-- search btn -->
     <div class="search-bar">
       <!-- [Bug] v-model.lazy 无法在el-input上工作 -->
-      <el-input v-model.lazy="input" placeholder="请输入姓名搜索🔍" />
+      <el-input v-model.lazy.trim="input" placeholder="请输入姓名搜索🔍" />
       <div class="btn-select">
         <el-button type="primary" @click="handleAddOrEditInfo('Add')">添加</el-button>
-        <el-button type="danger" v-if="multipleSelection.length > 0" @click="handleDeleteMultiple">删除多选</el-button>
+        <el-badge :value="multipleSelection.length" v-if="multipleSelection.length > 0" class="item">
+          <el-button type="danger" @click="handleDeleteMultiple">删除多选</el-button>
+        </el-badge>
       </div>
     </div>
     <!-- table -->
     <div class="table-core">
-      <el-table :data="tableData" style="width: 100%" @selection-change="handleSelectionChange" border>
+      <el-table :data="paginationPageSize > 0 && input.length === 0 ? tableDataPagination : tableData" style="width: 100%"
+        @selection-change="handleSelectionChange" border>
         <el-table-column type="selection" width="55" />
-        <el-table-column prop="name" label="昵称" width="130" />
-        <el-table-column prop="email" label="邮箱" width="150" />
+        <el-table-column prop="name" label="昵称" width="80" />
+        <el-table-column prop="email" label="邮箱" width="160" />
         <el-table-column prop="phone" label="电话" width="120" />
         <el-table-column prop="state" label="状态" width="120" />
-        <el-table-column prop="address" label="地址" width="180" />
-        <el-table-column fixed="right" label="操作" width="120">
+        <el-table-column prop="address" label="地址" width="230" />
+        <el-table-column fixed="right" label="操作" width="100">
           <template #default="scope">
             <el-button class="table-delete" link type="primary" size="small" @click="handleDeleteData(scope.$index)">删除
             </el-button>
@@ -32,6 +35,10 @@
         </el-table-column>
       </el-table>
     </div>
+    <!-- pagination -->
+    <el-pagination class="pagination" small background layout="prev, pager, next" :total="tableData.length"
+      :default-page-size="paginationPageSize" @current-change="handlePageChange" />
+    <div class="clearfix"></div>
     <!-- footer -->
     <footer>
       <h4>技术栈</h4>
@@ -50,7 +57,6 @@
           </p>
         </div>
       </div>
-
     </footer>
   </div>
   <!-- dialog -->
@@ -84,7 +90,7 @@
 
 <script setup>
 import { ref, watch } from 'vue';
-import { create, remove, update, read } from './assets/modules/crudModules';
+import { create, remove, removeMultiple, update, read } from './assets/modules/crudModules.js';
 
 /** 数据data */
 const input = ref("")
@@ -115,11 +121,13 @@ const tableData = ref([
   //   }
 ])
 // 值类型浅拷贝没有问题，当表格数据中包含复杂类型数据时请务必用深拷贝
-let tableDataCopy = Object.assign(tableData.value)
+let tableDataCopy = Object.assign([], tableData.value)
+// 过滤显示，这里只做一层遮罩，实际数据在 tableData 和 tableDataCopy
+const tableDataPagination = ref(Object.assign(tableData.value))
 const multipleSelection = ref([])
 const dialogFormVisible = ref(false)
 const formLabelWidth = '65px'
-const form = ref({})
+let form = ref({})
 const dialogTitle = ref("编辑")
 const rules = {
   name: [
@@ -136,10 +144,13 @@ const rules = {
     { type: 'enum', message: 'The value of State must be ‘在职’ or ‘离职’', enum: ['在职', '离职'], required: true, trigger: 'change' }
   ],
   address: [
-    { min: 2, max: 12, message: 'Please enter the addressPlease enter an address between 2 and 12 in length', trigger: 'blur' }
+    { min: 2, max: 18, message: 'Please enter the addressPlease enter an address between 2 and 18 in length', trigger: 'blur' }
   ]
 }
 const ruleFormRef = ref()
+const paginationPageSize = 5 // 一页五行数据
+let currentPage = 1
+let dialogType = 'Add'  // 对话框类型，默认 Add
 
 
 
@@ -148,17 +159,24 @@ const restoreSearchValue = () => {
   input.value = ''
   // 先将表单数据恢复正常，因为可能会受到搜索框的影响
   tableData.value = tableDataCopy
+  tableDataPagination.value = tableData.value
 }
 const updateTableDataCopy = () => {
   // 更新copy数组
-  tableDataCopy = Object.assign(tableData.value)
+  tableDataCopy = Object.assign([], tableData.value)
+  tableDataPagination.value = Object.assign([], tableData.value)
+  handlePageChange(currentPage)
 }
-const getUsersData = () => {
-  read().then((response) => {
-    // console.log(response.status)
-    if (response.status === 200) {
+const resetForm = (formEl) => {
+  if (!formEl) formEl = ruleFormRef.value
+  formEl?.resetFields()
+}
+const getUsersData = async () => {
+  await read().then((response) => {
+    if (response.status === 200 && response.data.status === 0) {
       tableData.value = response.data.data
       updateTableDataCopy()
+      handlePageChange(currentPage)
       console.log(response.data)
     }
   })
@@ -166,18 +184,34 @@ const getUsersData = () => {
 getUsersData()
 
 
+
 /** -------------------------------------------- */
+// 处理分页按钮改变事件
+const handlePageChange = (val) => {
+  currentPage = val
+  // console.log(val)
+  restoreSearchValue()
+  tableDataPagination.value = tableDataPagination.value.filter((ele, index) => {
+    index++
+    return index > paginationPageSize * (val - 1) && index <= paginationPageSize * val
+  })
+}
 const handleDeleteData = (index) => {
   // console.log('handleDeleteData', index)
   // console.log(tableData.value[index].id)
-  remove(tableData.value[index].id).then((response) => {
+  remove(tableDataPagination.value[index].id).then((response) => {
     console.log(response.data)
   })
-  tableData.value.splice(index, 1)
+
+  tableData.value.splice(tableData.value.findIndex((ele) => ele.id === tableDataPagination.value[index].id), 1)
+  tableDataPagination.value.splice(index, 1)
+
+
+  updateTableDataCopy()
 }
 const handleEditData = (row) => {
   // console.log('handleEditData')
-  form.value = row
+  form.value = Object.assign({}, row)
   handleAddOrEditInfo("Edit")
 }
 // 多选
@@ -189,7 +223,10 @@ const handleAddOrEditInfo = (type) => {
   dialogFormVisible.value = true
   dialogTitle.value = type === "Add" ? "添加" : "编辑"
 
+  resetForm()
   if (type === "Add") form.value = {}
+
+  dialogType = type
 }
 const handleDialogConfirm = async (formEl) => {
   if (!formEl) return
@@ -200,38 +237,65 @@ const handleDialogConfirm = async (formEl) => {
 
       // 将信息更新到表格原位置
       // 检测查找索引是否存在
+      // 本地id用随机数生成，与服务器端不一致，只有刷新数据后才同步
       const index = tableData.value?.findIndex((d) => d.id === form.value.id) || -1
-      if (index !== -1) {
+      if (dialogType === 'Edit') {
         update(form.value).then((response) => {
           console.log(response.data)
         })
         tableData.value[index] = form.value
+        updateTableDataCopy()
       }
-      else {
-        restoreSearchValue()
+      else if (dialogType === 'Add') {
+        tableData.value = tableDataCopy
+        // restoreSearchValue()
         create(form.value).then(response => {
           console.log(response.data)
-        })
-        // 将数据推到数组中
-        tableData.value.push(form.value)
 
-        updateTableDataCopy()
+          // 这一步很重要
+          // form.value = { id: getRandomInt(1000), ...form.value }
+          // 将数据推到数组中
+          tableData.value.push(form.value)
+          getUsersData()
+        })
+
+
+
+        // updateTableDataCopy()
       }
     } else {
       // console.log('error submit!', fields)
     }
   })
-
+  // 必须清除掉对话框表单值
+  form.value = {}
 }
 // 处理多选删除事件
 const handleDeleteMultiple = () => {
   restoreSearchValue()
+  const arr = []
   multipleSelection.value.forEach(ele => {
+    // console.dir(tableData.value)
     const index = tableData.value.findIndex(d => d.id === ele.id)
-    remove(tableData.value[index].id).then((response) => {
+    // handleDeleteData(index)
+
+    arr.push(tableData.value[index].id)
+  })
+
+  // 在这里将要删除的数据的唯一标识ID记录下来，调用一次删除多条数据接口
+  // 不在上面每次请求移除一条数据，优化！
+  // console.log(JSON.stringify(arr))
+  removeMultiple(arr).then((response) => {
+    console.log(response.data)
+    if (response.status === 200 && response.data.status === 0) {
       console.log(response.data)
-    })
-    tableData.value.splice(index, 1)
+      arr.forEach((val) => {
+        const index = tableData.value.findIndex(d => d.id === val)
+        tableData.value.splice(index, 1)
+      })
+
+      updateTableDataCopy()
+    }
   })
 }
 
@@ -278,6 +342,10 @@ watch(input, (newQuestion) => {
   width: 200px;
 }
 
+.table-box .search-bar .btn-select .item {
+  margin-left: 10px;
+}
+
 /* 表格删除按钮的颜色以及交互样式 */
 .table-delete {
   color: #F56C6C;
@@ -286,6 +354,12 @@ watch(input, (newQuestion) => {
 .table-delete:hover,
 .table-delete:focus {
   color: #f89898;
+}
+
+/* pagination分页 */
+.pagination {
+  float: right;
+  margin: 10px 0;
 }
 
 
